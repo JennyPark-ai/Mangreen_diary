@@ -459,10 +459,11 @@
     transform: translateX(-50%) translateY(10px);
     background: rgba(58,45,30,0.92);
     color:#fff;
-    padding:10px 16px;
+    padding:9px 14px;
     border-radius:16px;
-    font-size:12.5px;
-    max-width:82%;
+    font-size:12px;
+    max-width:94%;
+    white-space:nowrap;
     text-align:center;
     line-height:1.4;
     opacity:0;
@@ -525,6 +526,17 @@
     <div class="modal-actions">
       <button class="btn-cancel" id="modalCancel">다음에요</button>
       <button class="btn-confirm" id="modalConfirm">후원 페이지 열기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="shareOverlay">
+  <div class="modal-box">
+    <img id="shareImg" alt="맹그린 꾸미기 결과" style="width:100%;border-radius:16px;display:block;margin-bottom:12px;">
+    <p style="margin:0 0 16px;">이미지를 길게 눌러서 저장하거나 공유해보세요.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="shareCloseBtn">닫기</button>
+      <button class="btn-confirm" id="shareDownloadBtn">다운로드</button>
     </div>
   </div>
 </div>
@@ -819,31 +831,31 @@ function makeDots(n, cls){
 /* ---------- Maenggreen's voice lines ---------- */
 const EQUIP_QUOTES = [
   '안녕, 나는 맹그린이야!',
-  '나는 맹그로브 숲을 지키고 있어',
-  '탄소 마시는 거 정말 좋아해!',
-  '내 매력 포인트? 바로 이 엉덩이야',
-  '반딧불이 같이 보러 갈래?',
-  '이 복슬복슬한 머리, 마음에 들어?',
-  '난 친구들이랑 어울리는 게 제일 좋아',
-  '나 사실 열세 살이야, 동안이지?',
+  '맹그로브 숲을 지키고 있어',
+  '탄소 마시는 거 좋아해!',
+  '내 매력 포인트는 엉덩이야',
+  '반딧불이 같이 볼래?',
+  '복슬복슬한 머리 어때?',
+  '친구들이랑 노는 게 제일 좋아',
+  '나 사실 열세 살이야',
   '오늘도 숲을 지키러 가야지!',
-  '물고기 친구들 정말 귀엽지 않아?',
-  '어때, 나 좀 멋있어졌어?',
-  '숲이 파괴되지 않게 힘내는 중이야'
+  '물고기 친구들 귀엽지?',
+  '나 좀 멋있어졌어?',
+  '숲을 위해 힘내는 중이야'
 ];
 const THANK_QUOTES = [
-  '고마워! 덕분에 숲을 더 오래 지킬 수 있어',
+  '고마워! 숲을 더 오래 지킬 수 있어',
   '네 마음 덕분에 힘이 나!',
   '이 마음, 잊지 않을게 🌱',
-  '친구들이 하나 둘 늘어나는 기분이야',
-  '너 같은 친구가 있어서 다행이야',
-  '고마워, 맹그로브 숲이 더 튼튼해질 거야'
+  '친구들이 늘어나는 기분이야',
+  '너 같은 친구가 있어 다행이야',
+  '고마워, 숲이 더 튼튼해질 거야'
 ];
 const UPLOAD_QUOTES = [
-  '우와, 네가 만든 거야? 완전 마음에 들어!',
+  '우와, 완전 마음에 들어!',
   '나 지금 엄청 특별해진 기분이야!',
   '이런 건 처음 입어봐, 신기해!',
-  '역시 내 친구가 만든 게 최고야'
+  '역시 내 친구가 최고야'
 ];
 function pickQuote(pool){ return pool[Math.floor(Math.random()*pool.length)]; }
 
@@ -1304,6 +1316,9 @@ document.getElementById('shareBtn').onclick = async ()=>{
   showToast('이미지를 만드는 중이에요...');
   try{
     const blob = await composeShareImage();
+    const url = URL.createObjectURL(blob);
+
+    // try the claude.ai artifact-only native save first (no-op everywhere else)
     let dl = null;
     try{
       if(window.claude && window.claude.use){ dl = await window.claude.use('downloads'); }
@@ -1312,19 +1327,38 @@ document.getElementById('shareBtn').onclick = async ()=>{
       try{
         await dl.save({ filename:'맹그린_꾸미기.png', data: blob });
         showToast('이미지를 저장했어요! 🌱');
+        btn.disabled = false;
+        return;
       }catch(err){
-        if(err && err.code==='declined'){ showToast('저장을 취소했어요'); }
-        else { showToast('저장할 수 없었어요. 다시 시도해주세요'); }
+        if(err && err.code==='declined'){ showToast('저장을 취소했어요'); btn.disabled = false; return; }
+        // fall through to the universal lightbox on any other error
       }
-    } else {
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      showToast('새 탭에 이미지를 열었어요. 길게 눌러 저장해보세요');
     }
+
+    // universal fallback: show the image in-page (works even inside
+    // in-app browsers like KakaoTalk that block window.open popups)
+    const shareImg = document.getElementById('shareImg');
+    shareImg.src = url;
+    document.getElementById('shareOverlay').classList.remove('hidden');
+    document.getElementById('shareDownloadBtn').onclick = ()=>{
+      try{
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '맹그린_꾸미기.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }catch(e){
+        showToast('길게 눌러서 저장해주세요');
+      }
+    };
   }catch(e){
     showToast('이미지를 만들지 못했어요');
   }
   btn.disabled = false;
+};
+document.getElementById('shareCloseBtn').onclick = ()=>{
+  document.getElementById('shareOverlay').classList.add('hidden');
 };
 
 /* ---------- reset ---------- */
